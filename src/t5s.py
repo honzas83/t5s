@@ -184,9 +184,51 @@ def SqrtScheduler(learning_rate, verbose=0):
     return LearningRateScheduler(lambda n: learning_rate*1/((n+1)**0.5), verbose=verbose)
 
 
+class CheckpointSaver(Callback):
+    logger = logging.getLogger("t5s.CheckpointSaver")
+
+    def __init__(self, model, config):
+        super(CheckpointSaver, self).__init__()
+        self.model = model
+        self.config = config
+        self.freq = config["t5_model"].get("save_checkpoint_every", None)
+        self.epoch = None
+        self.last_saved_epoch = None
+        self.line_counter = tf.Variable(0, trainable=False, name="line_counter")
+
+    def on_train_end(self, logs=None):
+        self.save()
+
+    def on_epoch_end(self, epoch, logs=None):
+        self.epoch = epoch
+        print()
+        self.logger.info("Consumed %d training examples", self.line_counter.value().numpy())
+        if self.freq is not None and epoch % self.freq == 0:
+            self.save()
+
+    def save(self):
+        if self.last_saved_epoch == self.epoch:
+            # skip save on_train_end, it was already done on_epoch_end
+            return
+
+        out_fn = self.config["t5_model"]["save_checkpoint"]
+        self.logger.info("Saving checkpoint to %s", out_fn)
+        model.save_pretrained(out_fn)
+        self.config["t5_model"]["load_checkpoint"] = self.config["t5_model"]["save_checkpoint"]
+        if self.epoch is not None:
+            self.config["training"]["initial_epoch"] = self.epoch+1
+            if "steps_per_epoch" in self.config["training"]:
+                self.config["training"]["skip_samples"] = self.line_counter.value().numpy().item()
+
+        out_yaml_fn = self.config["t5_model"]["save_checkpoint"].rsplit(".", 1)[0]+".yaml"
+        with open(out_yaml_fn, "w", encoding="utf-8") as fw:
+            yaml.dump(self.config, fw, default_flow_style=False)
+
+        self.last_saved_epoch = self.epoch
+
 
 class T5(object):
-    logger = logging.getLogger("t5_lib.T5")
+    logger = logging.getLogger("t5s.T5")
 
     def __init__(self, config):
         """
@@ -221,6 +263,7 @@ class T5(object):
 
         self.logger.info("Loading model from %s", model_fn)
         self.model = T5Training.from_pretrained(model_fn)
+        return self.model
 
     def predict(self, batch):
         if self.predict_tokenizers is None:
@@ -250,4 +293,73 @@ class T5(object):
         preds = tf_tokenizer.detokenize(outputs).numpy()
         preds = [i.decode() for i in preds]
         return preds
+
+    def fine_tune(self):
+        # Initialize configuration variables
+        dataset_config = self.config.get("dataset", {})
+        training_config = self.config.get("training", {})
+
+        train_tsv = dataset_config["train_tsv"]
+        devel_tsv = dataset_config["devel_tsv"]
+        test_tsv = dataset_config["test_tsv"]
+
+        dataset_kwargs = dataset_config.get("loader", {})
+
+        steps_per_epoch = training_config.get("steps_per_epoch", None)
+        skip_samples = training_config.get("skip_samples", None)
+
+        learning_rate = training_config.get("learning_rate", 1e-4)
+        learning_rate_schedule = training_config.get("learning_rate_schedule", True)
+
+        # Load the SentencePiece tokenizer
+        tokenizer, tf_tokenizer = self.load_tokenizer()
+
+        model = self.load_model()
+
+        # Configure trainable variables
+        model.shared.trainable = training_config["shared_trainable"]
+        model.encoder.trainable = training_config["encoder_trainable"]
+
+        # Initialize metrics
+        metrics = [SentAccuracy(), EditAccuracy()]
+
+        # Initialize optimizer
+        optimizer = "adam"
+
+        model.compile(optimizer=optimizer, metrics=metrics)
+
+        callbacks = []
+        if learning_rate_schedule:
+            callbacks.append(SqrtScheduler(learning_rate, verbose=1))
+
+        self.logger.info("Trained model will be saved into %s", self.config["t5_model"]["save_checkpoint"])
+        checkpoint_saver = CheckpointSaver(model, self.config)
+        callbacks.append(checkpoint_saver)
+
+        # Instantiate datasets
+        self.logger.debug("Dataset loader parameters: %s", dataset_kwargs)
+        self.logger.info("Training dataset: %s", train_tsv)
+        train_dataset_kwargs = dataset_kwargs.copy()
+        if steps_per_epoch:
+            train_dataset_kwargs["repeat"] = True
+        if skip_samples:
+            self.logger.info("Skipping initial %d samples, training starts from epoch %d",
+                        skip_samples, training_config["initial_epoch"]+1)
+            train_dataset_kwargs["skip"] = skip_samples
+        train_dataset = tsv_dataset(train_tsv, tf_tokenizer,
+                                    line_counter=checkpoint_saver.line_counter,
+                                    **train_dataset_kwargs)
+
+        self.logger.info("Development dataset: %s", devel_tsv)
+        dev_dataset_kwargs = dataset_kwargs.copy()
+        dev_dataset_kwargs.pop("repeat", None)
+        dev_dataset_kwargs.pop("shuffle_window", None)
+        dev_dataset = tsv_dataset(devel_tsv, tf_tokenizer, **dev_dataset_kwargs)
+
+        self.model.fit(train_dataset, 
+                       validation_data=dev_dataset,
+                       steps_per_epoch=steps_per_epoch,
+                       callbacks=callbacks,
+                       initial_epoch=training_config["initial_epoch"],
+                       epochs=training_config["n_epochs"])
 
