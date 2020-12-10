@@ -213,7 +213,7 @@ class CheckpointSaver(Callback):
 
         out_fn = self.config["t5_model"]["save_checkpoint"]
         self.logger.info("Saving checkpoint to %s", out_fn)
-        model.save_pretrained(out_fn)
+        self.model.save_pretrained(out_fn)
         self.config["t5_model"]["load_checkpoint"] = self.config["t5_model"]["save_checkpoint"]
         if self.epoch is not None:
             self.config["training"]["initial_epoch"] = self.epoch+1
