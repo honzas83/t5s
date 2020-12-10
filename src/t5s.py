@@ -252,7 +252,7 @@ class T5(object):
 
     def load_model(self):
         if self.model is not None:
-            return
+            return self.model
 
         # Load the pre-trained model
         model_config = self.config["t5_model"]
