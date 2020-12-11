@@ -6,7 +6,7 @@ T5 is a shortcut for the _Text-to-text transfer transformer_ - the pre-trained s
 
 Install via Python PIP directly from GitHub:
 
-```
+```shell
 pip install git+https://github.com/honzas83/t5s
 ```
 
@@ -23,7 +23,7 @@ Prepare simple tab-separated (TSV) datasets containing two columns: `input text`
 
 The YAML specifies the name of pre-trained T5 model, the SentencePiece model, the names of TSV files and parameters for fine-tuning such as number of epochs, batch sizes and learning rates.
 
-```
+```yaml
 cat > aclimdb.yaml <<EOF
 tokenizer:
     spm: 'cc_all.32000/sentencepiece.model'
@@ -67,7 +67,7 @@ EOF
 
 Use the script `t5_fine_tune.py` to fine tune the pre-trained T5 model:
 
-```
+```shell
 t5_fine_tune.py aclimdb.yaml
 ```
 
@@ -77,7 +77,7 @@ The fine-tuning script trains the T5 model and saves it's parameters into a mode
 
 The `t5_predict.py` is used to predict using the fine-tuned T5 model, the input could be TSV or a simple TXT file:
 
-```
+```shell
 t5_predict.py T5_aclImdb.yaml aclImdb.test.tsv aclImdb.test.pred.tsv
 ```
 
@@ -85,7 +85,7 @@ t5_predict.py T5_aclImdb.yaml aclImdb.test.tsv aclImdb.test.pred.tsv
 
 The t5s library comes also with a simple script for evaluation of reference and hypothesised TSV files:
 
-```
+```shell
 eval_tsv.py match aclImdb.dev.tsv aclImdb.dev.pred.tsv
 ```
 
