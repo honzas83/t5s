@@ -22,31 +22,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     t5 = T5(args.config)
+    t5.predict_tsv(args.tsv_in, args.tsv_out)
 
-    batch_size = t5.config.get("predict", {}).get("batch_size", 400)
-
-    with open(args.tsv_in, "r", encoding="utf-8") as fr, \
-         open(args.tsv_out, "w", encoding="utf-8") as fw:
-
-        batch = []
-
-        def flush(n_predicted=[0]):
-            preds = t5.predict(batch)
-
-            for input_sent, output_sent in zip(batch, preds):
-                n_predicted[0] += 1
-                print(input_sent, output_sent, sep="\t", file=fw)
-                fw.flush()
-                
-            del batch[:]
-            logger.info("Processed %d items", n_predicted[0])
-
-        for line in fr:
-            items = line.strip().split("\t")
-            input_sent = items[0]
-            batch.append(input_sent)
-            if len(batch) >= batch_size:
-                flush()
-        else:
-            if batch:
-                flush()

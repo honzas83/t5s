@@ -293,6 +293,35 @@ class T5(object):
         preds = tf_tokenizer.detokenize(outputs).numpy()
         preds = [i.decode() for i in preds]
         return preds
+    
+    def predict_tsv(self, tsv_in, tsv_out):
+        batch_size = self.config.get("predict", {}).get("batch_size", 400)
+
+        with open(tsv_in, "r", encoding="utf-8") as fr, \
+             open(tsv_out, "w", encoding="utf-8") as fw:
+
+            batch = []
+
+            def flush(n_predicted=[0]):
+                preds = self.predict(batch)
+
+                for input_sent, output_sent in zip(batch, preds):
+                    n_predicted[0] += 1
+                    print(input_sent, output_sent, sep="\t", file=fw)
+                    fw.flush()
+                    
+                del batch[:]
+                logger.info("Processed %d items", n_predicted[0])
+
+            for line in fr:
+                items = line.strip().split("\t")
+                input_sent = items[0]
+                batch.append(input_sent)
+                if len(batch) >= batch_size:
+                    flush()
+            else:
+                if batch:
+                    flush()
 
     def fine_tune(self):
         # Initialize configuration variables
