@@ -311,7 +311,7 @@ class T5(object):
                     fw.flush()
                     
                 del batch[:]
-                logger.info("Processed %d items", n_predicted[0])
+                self.logger.info("Processed %d items", n_predicted[0])
 
             for line in fr:
                 items = line.strip().split("\t")
