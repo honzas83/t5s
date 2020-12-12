@@ -157,7 +157,10 @@ def tsv_dataset(fn, tf_tokenizer, input_size=1024, output_size=1280, min_batch_s
     def window_size_func(key):
         return key
 
-    dataset = tf.data.TextLineDataset(fn)
+    if isinstance(fn, list):
+        dataset = tf.data.TextLineDataset(fn, num_parallel_reads=len(fn))
+    else:
+        dataset = tf.data.TextLineDataset(fn)
     if repeat:
         dataset = dataset.repeat()
     if skip:
