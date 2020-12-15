@@ -3,9 +3,18 @@ import tensorflow as tf
 from transformers import (T5Tokenizer, 
                           TFT5ForConditionalGeneration)
 from tensorflow.keras.callbacks import LearningRateScheduler, Callback
-
+from sklearn.metrics import precision_recall_fscore_support
 import logging
 import yaml
+import numpy as np
+import sys
+import os
+
+
+def remove_last_ext(fn):
+    "Returns the filename with the last extension removed"
+    return fn.rsplit(".", 1)[0]
+
 
 def sparse_from_dense(t):
     idx = tf.where(tf.not_equal(t, 0))
@@ -114,11 +123,13 @@ def tsv_dataset(fn, tf_tokenizer, input_size=1024, output_size=1280, min_batch_s
         if line_counter is not None:
             line_counter.assign_add(1)
         parts = tf.strings.split(line, "\t", 1)
+        parts = tf.cond(tf.shape(parts)[0] == 2, lambda: parts, lambda: tf.stack([parts[0], tf.constant("")]))
         text = parts[0]
         label = parts[1]
         return (text, label)
 
     def filter_labels(text, label):
+        # TODO: add counter of ignored examples
         return tf.strings.length(label) > 0
         
     def tokenize(text, label):
@@ -223,9 +234,9 @@ class CheckpointSaver(Callback):
             if "steps_per_epoch" in self.config["training"]:
                 self.config["training"]["skip_samples"] = self.line_counter.value().numpy().item()
 
-        out_yaml_fn = self.config["t5_model"]["save_checkpoint"].rsplit(".", 1)[0]+".yaml"
+        out_yaml_fn = self.config["t5_model"]["save_checkpoint"]+".yaml"
         with open(out_yaml_fn, "w", encoding="utf-8") as fw:
-            yaml.dump(self.config, fw, default_flow_style=False)
+            yaml.dump(self.config, fw, default_flow_style=False, sort_keys=True)
 
         self.last_saved_epoch = self.epoch
 
@@ -395,3 +406,192 @@ class T5(object):
                        initial_epoch=training_config["initial_epoch"],
                        epochs=training_config["n_epochs"])
 
+        if "evaluation" in self.config:
+            self.evaluate()
+
+    def predict_dataset(self, dataset):
+        tsv = self.config["dataset"].get("{}_tsv".format(dataset))
+        if tsv is None:
+            raise ValueError("No such dataset: {}".format(dataset))
+
+        if not isinstance(tsv, list):
+            tsv = [tsv]
+
+        model_base = os.path.split(self.config["t5_model"]["save_checkpoint"])[-1]
+
+        ref_fns = []
+        hyp_fns = []
+        for ref_fn in tsv:
+            hyp_fn = "{ref_base}.{model_base}.tsv".format(
+                        ref_base=remove_last_ext(ref_fn),
+                        model_base=model_base,
+                    )
+            self.logger.info("Predicting %s into %s", ref_fn, hyp_fn)
+            self.predict_tsv(ref_fn, hyp_fn)
+            ref_fns.append(ref_fn)
+            hyp_fns.append(hyp_fn)
+        return ref_fns, hyp_fns
+
+    def evaluate(self):
+        evaluation_cfg = self.config["evaluation"]
+        metric_name = evaluation_cfg["metric"]
+        metric = EVAL_METRICS[metric_name]
+
+        default_eval_datasets = [i[:-4] for i in self.config["dataset"] if i.endswith("_tsv") and i != "train_tsv"]
+        eval_datasets = evaluation_cfg.get("datasets", default_eval_datasets)
+
+        for dataset in eval_datasets:
+            ref_fns, hyp_fns = self.predict_dataset(dataset)
+
+            eval_results = eval_tsv(metric, ref_fns, hyp_fns)
+
+            eval_fn = "{model_base}.eval.{dataset}.yaml".format(
+                            model_base=self.config["t5_model"]["save_checkpoint"],
+                            dataset=dataset,
+                      )
+
+            self.logger.info("Evaluation results for dataset %s:", dataset)
+            with open(eval_fn, "w", encoding="utf-8") as fw:
+                yaml_dump_result(eval_results, sys.stdout)
+                yaml_dump_result(eval_results, fw)
+
+
+#  Evaluation metrics definition
+
+
+def f1_multilabel(pairs):
+    def slash_split(item):
+        return tuple(i.strip() for i in item.split("/"))
+
+    ref, hyp = zip(*pairs)
+    ref = [slash_split(i) for i in ref]
+    hyp = [slash_split(i) for i in hyp]
+
+    kwds_set = set()
+    for lst in [ref, hyp]:
+        for kws in lst:
+            kwds_set |= set(kws)
+
+    kwds_list = {kw: idx for idx, kw in enumerate(list(kwds_set))}
+
+    def to_array(lst):
+        ret = np.zeros((len(lst), len(kwds_list)))
+        for idx, item in enumerate(lst):
+            for kw in item:
+                ret[idx, kwds_list[kw]] = 1
+        return ret
+
+    ref = to_array(ref)
+    hyp = to_array(hyp)
+
+    P, R, F, _ = precision_recall_fscore_support(ref, hyp, average="samples")
+    return {"P": float(P), "R": float(R), "F": float(F)}
+
+
+def match(pairs):
+    n = 0
+    ok = 0
+    w_n = 0
+    w_ok = 0
+    for ref, hyp in pairs:
+        if ref == hyp:
+            ok += 1
+        n += 1
+
+        ref = ref.split()
+        hyp = hyp.split()
+        w_n += len(ref)
+        for r1, h1 in zip(ref, hyp):
+            if r1 == h1:
+                w_ok += 1
+
+    return {"SAcc": ok/n, "WAcc": w_ok/w_n, "W_N": w_n, "W_OK": w_ok, "S_N": n, "S_OK": ok, "W_Err": w_n-w_ok, "S_Err": n-ok}
+
+
+def binary_lab(pairs):
+    TP = 0
+    FN = 0
+    FP = 0
+    for ref, hyp in pairs:
+        ref = ref.split()
+        hyp = hyp.split()
+        for r, h in zip(ref, hyp):
+            if r == h == "1":
+                TP += 1
+            elif r == "1" and h == "0":
+                FN += 1
+            elif r == "0" and h == "1":
+                FP += 1
+
+    P = TP / (TP+FP)
+    R = TP / (TP+FN)
+    F = 2 * P * R / (P+R)
+
+    return {"TP": TP, "FN": FN, "FP": FP, "P": P, "R": R, "F": F}
+
+
+EVAL_METRICS = {
+    "f1_multilabel": f1_multilabel,
+    "match": match,
+    "binary_lab": binary_lab,
+}
+
+TOTAL_METRIC = "__total__"
+
+def eval_tsv(metric, ref, hyp):
+    """Evaluates the prediction results using reference and (optionally) multiple hypothesis
+
+    Args:
+        metric: Metric function to evaluate, choose from EVAL_METRICS dictionary
+        ref: Reference TSV
+        hyp: Single string or list of strings, hypothesis TSV
+    """
+    logger = logging.getLogger("t5s.eval_tsv")
+
+    if not isinstance(ref, list):
+        ref = [ref]
+    if not isinstance(hyp, list):
+        hyp = [hyp]
+
+    assert len(ref) == len(hyp)
+
+    ret = {}
+    all_pairs = []
+    for ref_fn, hyp_fn in zip(ref, hyp):
+        pairs = []
+        with open(ref_fn, "r", encoding="utf-8") as fr_ref, \
+             open(hyp_fn, "r", encoding="utf-8") as fr_hyp:
+            for idx, (ref_line, hyp_line) in enumerate(zip(fr_ref, fr_hyp)):
+                ref_in, ref_out = ref_line.split("\t")[:2]
+                hyp_in, hyp_out = hyp_line.split("\t")[:2]
+                if ref_in != hyp_in:
+                    logger.warning("Reference and hypothesis inputs mismatch on line: %d", idx)
+
+                pairs.append((ref_out, hyp_out))
+
+            logger.info("Loaded %d examples", len(pairs))
+
+        all_pairs.extend(pairs)
+        if len(hyp) != 1:
+            # Store partial results only if we have multiple files
+            ret[hyp_fn] = metric(pairs)
+    # Compute total metric value
+    ret[TOTAL_METRIC] = metric(all_pairs)
+    return ret
+
+
+def yaml_dump_result(obj, stream):
+    """Redefinition of yaml.safe_dump with added float representer
+
+    The float representer uses float precision of four decimal digits
+    """
+    def float_representer(dumper, value):
+        text = '{0:.4f}'.format(value)
+        return dumper.represent_scalar(u'tag:yaml.org,2002:float', text)
+
+    class ResultDumper(yaml.SafeDumper):
+        def __init__(self, *args, **kwargs):
+            super(ResultDumper, self).__init__(*args, **kwargs)
+            self.add_representer(float, float_representer)
+
+    yaml.dump(obj, stream, Dumper=ResultDumper, default_flow_style=False, sort_keys=True)
