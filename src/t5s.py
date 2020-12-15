@@ -358,7 +358,6 @@ class T5(object):
 
         train_tsv = dataset_config["train_tsv"]
         devel_tsv = dataset_config["devel_tsv"]
-        test_tsv = dataset_config["test_tsv"]
 
         dataset_kwargs = dataset_config.get("loader", {})
 
