@@ -248,9 +248,11 @@ class T5(object):
         """
         """
         if isinstance(config, str):
+            self.config_fn = config
             with open(config, "r", encoding="utf-8") as fr:
                 self.config = yaml.safe_load(fr)
         else:
+            self.config_fn = None
             self.config = config
         self.model = None
         self.predict_tokenizers = None
@@ -375,6 +377,15 @@ class T5(object):
         if learning_rate_schedule:
             callbacks.append(SqrtScheduler(learning_rate, verbose=1))
 
+        # Automatically generate t5_model.save_checkpoint
+        if "save_checkpoint" not in self.config["t5_model"]:
+            if self.config_fn is not None and self.config_fn.endswith(".init.yaml"):
+                save_checkpoint = remove_last_ext(self.config_fn)
+                save_checkpoint = remove_last_ext(save_checkpoint)
+                self.config["t5_model"]["save_checkpoint"] = save_checkpoint
+            else:
+                raise ValueError("Cannot determine the value of missing t5_model.save_checkpoint")
+
         self.logger.info("Trained model will be saved into %s", self.config["t5_model"]["save_checkpoint"])
         checkpoint_saver = CheckpointSaver(model, self.config)
         callbacks.append(checkpoint_saver)
@@ -432,15 +443,34 @@ class T5(object):
             hyp_fns.append(hyp_fn)
         return ref_fns, hyp_fns
 
-    def evaluate(self):
+    def evaluate(self, datasets=None):
+        """Executes the evaluation of the model
+
+        The evaluation is performed for each dataset under the "dataset"
+        section, with the exception of train dataset. The dataset's key must
+        end with "_tsv" suffix and the name of dataset is without this suffix.
+
+        The result is stored in YAML file with the following filename:
+        "{model_base}.eval.{dataset}.yaml", where "model_base" is the path to
+        model checkpoint (see "save_checkpoint" in configuration YAML) and
+        "dataset" is the name of the dataset.
+
+        The evaluation datasets could be limited with the configuration key
+        "evaluation.datasets".
+
+        Args:
+            datasets: an override for "evaluation.datasets" configuration key
+        """
         evaluation_cfg = self.config["evaluation"]
         metric_name = evaluation_cfg["metric"]
         metric = EVAL_METRICS[metric_name]
 
-        default_eval_datasets = [i[:-4] for i in self.config["dataset"] if i.endswith("_tsv") and i != "train_tsv"]
-        eval_datasets = evaluation_cfg.get("datasets", default_eval_datasets)
+        if datasets is None:
+            default_eval_datasets = [i[:-4] for i in self.config["dataset"] if i.endswith("_tsv") and i != "train_tsv"]
+            datasets = evaluation_cfg.get("datasets", default_eval_datasets)
 
-        for dataset in eval_datasets:
+
+        for dataset in datasets:
             ref_fns, hyp_fns = self.predict_dataset(dataset)
 
             eval_results = eval_tsv(metric, ref_fns, hyp_fns)
