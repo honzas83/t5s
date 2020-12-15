@@ -15,9 +15,21 @@ def remove_last_ext(fn):
     "Returns the filename with the last extension removed"
     return fn.rsplit(".", 1)[0]
 
+# SentencePiece ids as required in the T5 trainig code
+
+PAD_ID = 0
+EOS_ID = 1
+UNK_ID = 2
 
 def sparse_from_dense(t):
-    idx = tf.where(tf.not_equal(t, 0))
+    """Helper function for edit_accuracy()
+
+    Args:
+        t: Tensor of type tf.int32
+        Returns:
+            SparseTensor without padding and eos tokens
+    """
+    idx = tf.where(tf.logical_and(tf.not_equal(t, PAD_ID), tf.not_equal(t, EOS_ID)))
     shape = tf.shape(t)
     shape = tf.cast(shape, dtype=tf.int64)
     return tf.SparseTensor(idx, tf.gather_nd(t, idx), shape)
