@@ -2,7 +2,7 @@ from tensorflow_text.python.ops.sentencepiece_tokenizer import SentencepieceToke
 import tensorflow as tf
 from transformers import (T5Tokenizer, 
                           TFT5ForConditionalGeneration)
-from tensorflow.keras.callbacks import LearningRateScheduler, Callback
+from tensorflow.keras.callbacks import LearningRateScheduler, Callback, EarlyStopping
 from sklearn.metrics import precision_recall_fscore_support
 import logging
 import yaml
@@ -367,6 +367,15 @@ class T5(object):
         learning_rate = training_config.get("learning_rate", 1e-4)
         learning_rate_schedule = training_config.get("learning_rate_schedule", True)
 
+        early_stopping = training_config.get("early_stopping", False)
+        if isinstance(early_stopping, dict):
+            # We have the configuration section for early stopping
+            # enable early_stopping and use the dict with details
+            early_stopping, early_stopping_config = True, early_stopping
+        else:
+            # No detailed configuration for early stopping, use empty dict
+            early_stopping_config = {}
+
         # Load the SentencePiece tokenizer
         tokenizer, tf_tokenizer = self.load_tokenizer()
 
@@ -387,6 +396,18 @@ class T5(object):
         callbacks = []
         if learning_rate_schedule:
             callbacks.append(SqrtScheduler(learning_rate, verbose=1))
+
+        if early_stopping:
+            # Configure early stopping
+            self.logger.info("Using early stopping config: %s", early_stopping_config)
+
+            early_stopping_quantity = early_stopping_config.get("quantity", "val_loss")
+            early_stopping_patience = early_stopping_config.get("patience", 0)
+
+            callbacks.append(EarlyStopping(monitor=early_stopping_quantity,
+                                           restore_best_weights=True,
+                                           verbose=True,
+                                           patience=early_stopping_patience))
 
         # Automatically generate t5_model.save_checkpoint
         if "save_checkpoint" not in self.config["t5_model"]:
