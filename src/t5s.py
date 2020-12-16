@@ -1,6 +1,6 @@
 from tensorflow_text.python.ops.sentencepiece_tokenizer import SentencepieceTokenizer as TFSentencepieceTokenizer
 import tensorflow as tf
-from transformers import (T5Tokenizer, 
+from transformers import (T5Tokenizer,
                           TFT5ForConditionalGeneration)
 from tensorflow.keras.callbacks import LearningRateScheduler, Callback, EarlyStopping
 from sklearn.metrics import precision_recall_fscore_support
@@ -15,11 +15,13 @@ def remove_last_ext(fn):
     "Returns the filename with the last extension removed"
     return fn.rsplit(".", 1)[0]
 
+
 # SentencePiece ids as required in the T5 trainig code
 
 PAD_ID = 0
 EOS_ID = 1
 UNK_ID = 2
+
 
 def sparse_from_dense(t):
     """Helper function for edit_accuracy()
@@ -38,12 +40,12 @@ def sparse_from_dense(t):
 def edit_accuracy(y_true, y_pred):
     y_true = sparse_from_dense(y_true)
     y_pred = sparse_from_dense(y_pred)
-    
+
     dist = tf.edit_distance(y_true, y_pred)
-    
+
     acc = tf.map_fn(lambda d: tf.cond(tf.math.is_finite(d), lambda: 1-d, lambda: 0.),
                     dist)
-    
+
     return acc
 
 
@@ -62,7 +64,6 @@ def sent_accuracy(y_true, y_pred, mask=None):
     equal = tf.cast(y_true == y_pred, tf.int32)
 
     mul = tf.math.reduce_prod(equal, axis=-1)
-    ref = tf.ones_like(mul)
 
     return mul
 
@@ -75,40 +76,40 @@ class SentAccuracy(tf.python.keras.metrics.MeanMetricWrapper):
 class T5Training(TFT5ForConditionalGeneration):
     # https://github.com/snapthat/TF-T5-text-to-text/blob/master/snapthatT5/notebooks/TF-T5-%20Training.ipynb
 
-    def __init__(self, *args, log_dir=None, cache_dir= None, **kwargs):
+    def __init__(self, *args, log_dir=None, cache_dir=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.loss_tracker= tf.keras.metrics.Mean(name='loss') 
+        self.loss_tracker = tf.keras.metrics.Mean(name='loss')
 
     @tf.function
     def train_step(self, data):
         x, _ = data
         y = x["labels"]
-        mask = x["decoder_attention_mask"]
+        #  mask = x["decoder_attention_mask"]
         with tf.GradientTape() as tape:
             outputs = self(x, training=True)
             loss = outputs[0]
             logits = outputs[1]
             loss = tf.reduce_mean(loss)
-            
+
             grads = tape.gradient(loss, self.trainable_variables)
-            
+
         self.optimizer.apply_gradients(zip(grads, self.trainable_variables))
-        
-        self.loss_tracker.update_state(loss)        
+
+        self.loss_tracker.update_state(loss)
         self.compiled_metrics.update_state(y, tf.math.argmax(logits, axis=-1, output_type=tf.int32))
         metrics = {m.name: m.result() for m in self.metrics}
-        
+
         return metrics
 
     def test_step(self, data):
         x, _ = data
         y = x["labels"]
-        mask = x["decoder_attention_mask"]
+        #  mask = x["decoder_attention_mask"]
         output = self(x, training=False)
         loss = output[0]
         loss = tf.reduce_mean(loss)
         logits = output[1]
-        
+
         self.loss_tracker.update_state(loss)
         self.compiled_metrics.update_state(y, tf.math.argmax(logits, axis=-1, output_type=tf.int32))
         return {m.name: m.result() for m in self.metrics}
@@ -143,21 +144,21 @@ def tsv_dataset(fn, tf_tokenizer, input_size=1024, output_size=1280, min_batch_s
     def filter_labels(text, label):
         # TODO: add counter of ignored examples
         return tf.strings.length(label) > 0
-        
+
     def tokenize(text, label):
         text = tf_tokenizer.tokenize(text)
         text_att = tf.cast(tf.math.not_equal(text, 0), tf.int32)
-        
+
         label = tf_tokenizer.tokenize(label)
         label_att = tf.cast(tf.math.not_equal(label, 0), tf.int32)
         return text, text_att, label, label_att
 
     def to_dict(text, text_att, label, label_att):
         batch_size = tf.shape(text)[0]
-        
+
         input_len = input_size // batch_size
         output_len = output_size // batch_size
-        
+
         return ({
             "input_ids": text[:, :input_len],
             "attention_mask": text_att[:, :input_len],
@@ -166,17 +167,17 @@ def tsv_dataset(fn, tf_tokenizer, input_size=1024, output_size=1280, min_batch_s
         }, None)
 
     def key_func(text, text_att, label, label_att):
-        in_len = tf.cast(tf.shape(text)[0], tf.int64) 
+        in_len = tf.cast(tf.shape(text)[0], tf.int64)
         in_per_batch = tf.cast(input_size, tf.int64) // in_len
 
-        out_len = tf.cast(tf.shape(label)[0], tf.int64) 
+        out_len = tf.cast(tf.shape(label)[0], tf.int64)
         out_per_batch = tf.cast(output_size, tf.int64) // out_len
-        
+
         return tf.maximum(min_batch_size, tf.minimum(in_per_batch, out_per_batch))
 
     def reduce_func(key, dataset):
         return dataset.padded_batch(key)
-        
+
     def window_size_func(key):
         return key
 
@@ -202,7 +203,7 @@ def tsv_dataset(fn, tf_tokenizer, input_size=1024, output_size=1280, min_batch_s
                             ))
                       .map(to_dict)
                       .prefetch(tf.data.experimental.AUTOTUNE)
-                )
+               )
     return dataset
 
 
@@ -311,9 +312,9 @@ class T5(object):
 
         sentences = tokenizer(batch, padding="longest", max_length=max_input_length, truncation=True)
         input_ids = tf.constant(sentences["input_ids"])
-        outputs = self.model.generate(input_ids, 
+        outputs = self.model.generate(input_ids,
                                       min_length=min_output_length,
-                                      max_length=max_output_length, 
+                                      max_length=max_output_length,
                                       early_stopping=True,
                                       no_repeat_ngram_size=no_repeat_ngram_size,
                                       length_penalty=length_penalty)
@@ -321,7 +322,7 @@ class T5(object):
         preds = tf_tokenizer.detokenize(outputs).numpy()
         preds = [i.decode() for i in preds]
         return preds
-    
+
     def predict_tsv(self, tsv_in, tsv_out):
         batch_size = self.config.get("predict", {}).get("batch_size", 400)
 
@@ -337,7 +338,7 @@ class T5(object):
                     n_predicted[0] += 1
                     print(input_sent, output_sent, sep="\t", file=fw)
                     fw.flush()
-                    
+
                 del batch[:]
                 self.logger.info("Processed %d items", n_predicted[0])
 
@@ -430,7 +431,7 @@ class T5(object):
             train_dataset_kwargs["repeat"] = True
         if skip_samples:
             self.logger.info("Skipping initial %d samples, training starts from epoch %d",
-                        skip_samples, training_config["initial_epoch"]+1)
+                             skip_samples, training_config["initial_epoch"]+1)
             train_dataset_kwargs["skip"] = skip_samples
         train_dataset = tsv_dataset(train_tsv, tf_tokenizer,
                                     line_counter=checkpoint_saver.line_counter,
@@ -442,7 +443,7 @@ class T5(object):
         dev_dataset_kwargs.pop("shuffle_window", None)
         dev_dataset = tsv_dataset(devel_tsv, tf_tokenizer, **dev_dataset_kwargs)
 
-        self.model.fit(train_dataset, 
+        self.model.fit(train_dataset,
                        validation_data=dev_dataset,
                        steps_per_epoch=steps_per_epoch,
                        callbacks=callbacks,
@@ -500,7 +501,6 @@ class T5(object):
         if datasets is None:
             default_eval_datasets = [i[:-4] for i in self.config["dataset"] if i.endswith("_tsv") and i != "train_tsv"]
             datasets = evaluation_cfg.get("datasets", default_eval_datasets)
-
 
         for dataset in datasets:
             ref_fns, hyp_fns = self.predict_dataset(dataset)
@@ -599,6 +599,7 @@ EVAL_METRICS = {
 }
 
 TOTAL_METRIC = "__total__"
+
 
 def eval_tsv(metric, ref, hyp):
     """Evaluates the prediction results using reference and (optionally) multiple hypothesis
