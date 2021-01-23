@@ -427,6 +427,7 @@ class T5(object):
         self.logger.debug("Dataset loader parameters: %s", dataset_kwargs)
         self.logger.info("Training dataset: %s", train_tsv)
         train_dataset_kwargs = dataset_kwargs.copy()
+        train_dataset_kwargs.pop("devel_samples", None)
         if steps_per_epoch:
             train_dataset_kwargs["repeat"] = True
         if skip_samples:
@@ -441,7 +442,11 @@ class T5(object):
         dev_dataset_kwargs = dataset_kwargs.copy()
         dev_dataset_kwargs.pop("repeat", None)
         dev_dataset_kwargs.pop("shuffle_window", None)
+        devel_samples = dev_dataset_kwargs.pop("devel_samples", None)
         dev_dataset = tsv_dataset(devel_tsv, tf_tokenizer, **dev_dataset_kwargs)
+        if devel_samples is not None:
+            self.logger.info("Limit development dataset to %s samples", devel_samples)
+            dev_dataset = dev_dataset.take(devel_samples)
 
         self.model.fit(train_dataset,
                        validation_data=dev_dataset,
