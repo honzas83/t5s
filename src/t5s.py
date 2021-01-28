@@ -705,11 +705,11 @@ def f1_tagged(pairs):
     try:
         R_total = TP / (TP+FN)
     except ZeroDivisionError:
-        P_total = 0.
+        R_total = 0.
     try:
         F_total = 2 * P_total * R_total / (P_total+R_total)
     except ZeroDivisionError:
-        P_total = 0.
+        F_total = 0.
 
     return {"P_tag": P, "R_tag": R, "F_tag": F,
             "P": P_total, "R": R_total, "F": F_total}
