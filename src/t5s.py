@@ -9,6 +9,8 @@ import yaml
 import numpy as np
 import sys
 import os
+import re
+from collections import Counter
 
 
 def remove_last_ext(fn):
@@ -597,8 +599,125 @@ def binary_lab(pairs):
     return {"TP": TP, "FN": FN, "FP": FP, "P": P, "R": R, "F": F}
 
 
+def get_tag_nodes(output, strip=True):
+    def stringify_tokens(tokens):
+        if strip:
+            # Strip the resulting tokens and replace multiple whitespaces
+            tokens = " ".join(tokens)
+            return re.sub(r"\s+", " ", tokens).strip()
+        else:
+            return "".join(tokens)
+
+    def add_tag_value(tag, value):
+        ret.setdefault(tag, [])
+        ret[tag].append(value)
+
+    ret = {}
+    parts = re.split("(</?[^>]*>)", output)
+    stack = []
+    for i in parts:
+        if i.startswith("</") and i.endswith(">"):
+            # This is a closing tag
+            tag = i[2:-1]
+            for idx, (stack_tag, tokens) in reversed(list(enumerate(stack))):
+                if tag == stack_tag:
+                    # We are closing a tag, so we add it to the returned values
+                    add_tag_value(tag, stringify_tokens(tokens))
+                    del stack[idx]
+                    break
+        elif i.startswith("<") and i.endswith("/>"):
+            # This is a singleton tag
+            tag = i[1:-2]
+            add_tag_value(tag, None)
+        elif i.startswith("<") and i.endswith(">"):
+            # This is an opening tag
+            tag = i[1:-1]
+            stack.append((tag, []))
+        else:
+            # This is a token, add it to all tags on the stack
+            token = i.strip() if strip else i
+            for tag, tokens in stack:
+                tokens.append(token)
+
+    # Add remaining (non-closed) tags,
+    # we assume that they span until the end of the string
+    for tag, tokens in stack:
+        add_tag_value(tag, stringify_tokens(tokens))
+
+    return ret
+
+
+def f1_tagged(pairs):
+    TP = Counter()
+    FN = Counter()
+    FP = Counter()
+    tag_set = set()
+    for ref, hyp in pairs:
+        ref = get_tag_nodes(ref)
+        hyp = get_tag_nodes(hyp)
+        tags = set(ref) | set(hyp)
+        tag_set |= tags
+        for tag in tags:
+            ref_values = ref.get(tag, [])
+            hyp_values = hyp.get(tag, [])
+
+            # Take reference values
+            while ref_values:
+                ref_val = ref_values.pop(0)
+                try:
+                    idx = hyp_values.index(ref_val)
+                    # We have a match, remove it from hypothesis
+                    del hyp_values[idx]
+                    TP[tag] += 1
+                except ValueError:
+                    # We have a false negative
+                    FN[tag] += 1
+
+            # Take hypothesis values
+            for hyp_value in hyp_values:
+                FP[tag] += 1
+
+    P = {}
+    R = {}
+    F = {}
+    for tag in tag_set:
+        try:
+            P[tag] = TP[tag] / (TP[tag]+FP[tag])
+        except ZeroDivisionError:
+            P[tag] = 0.
+        try:
+            R[tag] = TP[tag] / (TP[tag]+FN[tag])
+        except ZeroDivisionError:
+            R[tag] = 0.
+        try:
+            F[tag] = 2 * P[tag] * R[tag] / (P[tag]+R[tag])
+        except ZeroDivisionError:
+            F[tag] = 0.
+
+    TP = sum(TP.values())
+    FP = sum(FP.values())
+    FN = sum(FN.values())
+
+    try:
+        P_total = TP / (TP+FP)
+    except ZeroDivisionError:
+        P_total = 0.
+    try:
+        R_total = TP / (TP+FN)
+    except ZeroDivisionError:
+        P_total = 0.
+    try:
+        F_total = 2 * P_total * R_total / (P_total+R_total)
+    except ZeroDivisionError:
+        P_total = 0.
+
+    return {"P_tag": P, "R_tag": R, "F_tag": F,
+            "P": P_total, "R": R_total, "F": F_total}
+
+
 EVAL_METRICS = {
     "f1_multilabel": f1_multilabel,
+    "f1_tagged": f1_tagged,
     "match": match,
     "binary_lab": binary_lab,
 }
