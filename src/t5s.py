@@ -715,9 +715,14 @@ def f1_tagged(pairs):
             "P": P_total, "R": R_total, "F": F_total}
 
 
+def f1_tagged_sum(pairs):
+    return {key: value for (key, value) in f1_tagged(pairs).items() if key in "PRF"}
+
+
 EVAL_METRICS = {
     "f1_multilabel": f1_multilabel,
     "f1_tagged": f1_tagged,
+    "f1_tagged_sum": f1_tagged_sum,
     "match": match,
     "binary_lab": binary_lab,
 }
