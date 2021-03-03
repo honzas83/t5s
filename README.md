@@ -92,3 +92,17 @@ eval_tsv.py match aclImdb.dev.tsv aclImdb.dev.pred.tsv
 ## Use from Python code
 
 The whole library could be used directly from Python code, look inside the [examples](examples) directory. You can start with the [ACL IMDB sentiment analysis dataset](examples/t5s_aclimdb.ipynb).
+
+### Generate hidden state outputs
+
+The Hugginface Transformers library does not allow to generate the hidden states together in the `generate()` method. The `t5s` library includes the patched version of `_generate_no_beam_search()` method which accumulates the hidden states during generation of the output.
+
+```python
+import t5s
+
+t5 = t5s.T5(config)
+batch = ["input1", "input2"]
+output, hidden_states = model.predict(batch, generate_hidden_states=True)
+```
+
+The variable `hidden_states` is a list of tensors with shape `(len(batch), decoded_length, hidden_size)`. The first item in the list is the output of the output embedding, the outputs of 12 hidden layers follows and the last item is the output logits before applying the output softmax function. In other words for the `t5-base` architecture the list has 14 items and the `hidden_size` id 768 except the last logits output which has the same size as the SentencePiece vocabulary.
