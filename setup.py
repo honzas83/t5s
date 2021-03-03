@@ -7,9 +7,12 @@ with open("README.md", "r", encoding="utf-8") as fh:
 with open('requirements.txt') as f:
     requirements_txt = f.read().splitlines()
 
+## Version history
+# 0.3 -- added the ability to generate hidden states outputs
+
 setuptools.setup(
     name="t5s",
-    version="0.2",
+    version="0.3",
     author="Jan Švec",
     author_email="honzas@ntis.zcu.cz",
     description="T5 simple (text-to-text transfer transformer made simple)",
