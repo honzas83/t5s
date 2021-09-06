@@ -13,7 +13,7 @@ import os
 import re
 from collections import Counter
 
-print(transformers.__version__)
+
 def remove_last_ext(fn):
     "Returns the filename with the last extension removed"
     return fn.rsplit(".", 1)[0]
@@ -457,7 +457,9 @@ class T5(object):
             self.config = config
         self.model = None
         self.predict_tokenizers = None
-
+    def get_transformers_lib_version(self):
+      print(transformers.__version__)
+      
     def load_tokenizer(self, type="predict"):
         assert type == "predict"
 
