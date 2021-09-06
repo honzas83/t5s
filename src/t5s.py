@@ -13,7 +13,7 @@ import os
 import re
 from collections import Counter
 
-
+print(transformers.__version__)
 def remove_last_ext(fn):
     "Returns the filename with the last extension removed"
     return fn.rsplit(".", 1)[0]
