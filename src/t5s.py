@@ -3,6 +3,7 @@ import tensorflow as tf
 from transformers import (T5Tokenizer,
                           TFT5ForConditionalGeneration,
                           generation_tf_utils as _tfu)
+import transformers
 from tensorflow.keras.callbacks import LearningRateScheduler, Callback, EarlyStopping
 from sklearn.metrics import precision_recall_fscore_support
 import logging
