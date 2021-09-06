@@ -458,7 +458,7 @@ class T5(object):
         self.model = None
         self.predict_tokenizers = None
     def get_transformers_lib_version(self):
-      print(transformers.__version__)
+        print(transformers.__version__)
       
     def load_tokenizer(self, type="predict"):
         assert type == "predict"
