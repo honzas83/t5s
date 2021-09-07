@@ -117,7 +117,7 @@ class T5Training(TFT5ForConditionalGeneration):
         self.loss_tracker.update_state(loss)
         self.compiled_metrics.update_state(y, tf.math.argmax(logits, axis=-1, output_type=tf.int32))
         return {m.name: m.result() for m in self.metrics}
- """
+    """
     def _generate_no_beam_search(
         self,
         input_ids,
@@ -302,7 +302,7 @@ class T5Training(TFT5ForConditionalGeneration):
             return decoded, output_hidden_states
         else:
             return decoded
-"""
+    """
 
 def tsv_dataset(fn, tf_tokenizer, input_size=1024, output_size=1280, min_batch_size=2,
                 shuffle_window=None, line_counter=None, skip=None, repeat=False):
