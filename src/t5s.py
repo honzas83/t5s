@@ -117,7 +117,7 @@ class T5Training(TFT5ForConditionalGeneration):
         self.loss_tracker.update_state(loss)
         self.compiled_metrics.update_state(y, tf.math.argmax(logits, axis=-1, output_type=tf.int32))
         return {m.name: m.result() for m in self.metrics}
-    """
+ """
     def _generate_no_beam_search(
         self,
         input_ids,
@@ -139,13 +139,11 @@ class T5Training(TFT5ForConditionalGeneration):
         attention_mask,
         use_cache,
     ):
-        """
-    """Generate sequences for each example without beam search (num_beams == 1).
+        Generate sequences for each example without beam search (num_beams == 1).
         All returned sequence are generated independantly.
 
         Method overwritten in t5s to be able to generate also hidden_states.
-        """
-        """
+       
 
         # length of generated sentences / unfinished sentences
         unfinished_sents = tf.ones_like(input_ids[:, 0])
