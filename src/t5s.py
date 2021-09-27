@@ -511,9 +511,7 @@ class T5(object):
                                           max_length=max_output_length,
                                           early_stopping=True,
                                           no_repeat_ngram_size=no_repeat_ngram_size,
-                                          length_penalty=length_penalty,
-                                         return_dict_in_generate=True, 
-                                         output_hidden_states=True)
+                                          length_penalty=length_penalty)
             print(outputs)
             if generate_hidden_states:
                 # Split the hidden states from the outputs
