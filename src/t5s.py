@@ -506,7 +506,7 @@ class T5(object):
 
         try:
             self.model.config.generate_hidden_states = generate_hidden_states
-            outputs = self.model.generate(input_ids,
+            outputs_dict = self.model.generate(input_ids,
                                           min_length=min_output_length,
                                           max_length=max_output_length,
                                           early_stopping=True,
@@ -514,10 +514,10 @@ class T5(object):
                                           length_penalty=length_penalty,
                                           output_hidden_states=True,
                                           return_dict_in_generate=True)
-            print(outputs)
+            outputs = outputs_dict['sequences']
             if generate_hidden_states:
                 # Split the hidden states from the outputs
-                outputs, hidden_states = outputs
+                hidden_states = outputs_dict['decoder_hidden_states']
             else:
                 # The hidden states was not required
                 hidden_states = None
