@@ -117,7 +117,7 @@ class T5Training(TFT5ForConditionalGeneration):
         self.loss_tracker.update_state(loss)
         self.compiled_metrics.update_state(y, tf.math.argmax(logits, axis=-1, output_type=tf.int32))
         return {m.name: m.result() for m in self.metrics}
-    """
+    
     def _generate_no_beam_search(
         self,
         input_ids,
@@ -302,7 +302,6 @@ class T5Training(TFT5ForConditionalGeneration):
             return decoded, output_hidden_states
         else:
             return decoded
-    """
 
 def tsv_dataset(fn, tf_tokenizer, input_size=1024, output_size=1280, min_batch_size=2,
                 shuffle_window=None, line_counter=None, skip=None, repeat=False):
@@ -506,6 +505,15 @@ class T5(object):
 
         try:
             self.model.config.generate_hidden_states = generate_hidden_states
+            outputs = self.model.generate(input_ids,
+                                          min_length=min_output_length,
+                                          max_length=max_output_length,
+                                          early_stopping=True,
+                                          no_repeat_ngram_size=no_repeat_ngram_size,
+                                          length_penalty=length_penalty
+                                          )
+            """
+            PRO NOVOU VERZI TRANSFORMERS
             outputs_dict = self.model.generate(input_ids,
                                           min_length=min_output_length,
                                           max_length=max_output_length,
@@ -514,10 +522,15 @@ class T5(object):
                                           length_penalty=length_penalty,
                                           output_hidden_states=True,
                                           return_dict_in_generate=True)
+                                          
             outputs = outputs_dict['sequences']
+            """
             if generate_hidden_states:
                 # Split the hidden states from the outputs
+                """
                 hidden_states = outputs_dict['decoder_hidden_states']
+                """
+                outputs, hidden_states = outputs
             else:
                 # The hidden states was not required
                 hidden_states = None
