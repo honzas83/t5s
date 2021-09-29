@@ -139,11 +139,12 @@ class T5Training(TFT5ForConditionalGeneration):
         attention_mask,
         use_cache,
     ):
+      """
         Generate sequences for each example without beam search (num_beams == 1).
         All returned sequence are generated independantly.
 
         Method overwritten in t5s to be able to generate also hidden_states.
-       
+       """
 
         # length of generated sentences / unfinished sentences
         unfinished_sents = tf.ones_like(input_ids[:, 0])
