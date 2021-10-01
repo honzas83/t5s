@@ -532,7 +532,7 @@ class T5(object):
             if generate_hidden_states:
                 # Split the hidden states from the outputs
          
-                hidden_states = concatenate_hidden_states(outputs_dict['decoder_hidden_states'])
+                hidden_states = self.concatenate_hidden_states(outputs_dict['decoder_hidden_states'])
              
                 #outputs, hidden_states = outputs
             else:
