@@ -532,8 +532,8 @@ class T5(object):
             if generate_hidden_states:
                 # Split the hidden states from the outputs
          
-                hidden_states = outputs_dict['decoder_hidden_states']
-                
+                hidden_states = concatenate_hidden_states(outputs_dict['decoder_hidden_states'])
+             
                 #outputs, hidden_states = outputs
             else:
                 # The hidden states was not required
@@ -549,17 +549,23 @@ class T5(object):
             return preds, hidden_states
         else:
             return preds
-    def concatenate_hidden_states(hidden_states):
-      concatenated_hiden_states = list()
+          
+    def concatenate_hidden_states(hidden_states):      
       assert len(hidden_states) != 0
+      # The length of output
       length_output = len(hidden_states)
+      # Number of layers
       num_of_layers = len(hidden_states[0])
-      for idx_output in range(0, length_of_output):
-        for idx_layer in range(0, num_of_layers):
-          concatenated_hidden_states[idx_layer] = None
-        
-        
-        
+      # List of Nones with length wich is same as the number of layers
+      concatenated_hidden_states = [None] * num_of_layers
+      # Easily concatenate all the hidden_states 
+      for idx_layer in range(0, num_of_layers):
+          for idx_output in range(0, length_output):
+              if concatenated_hidden_states[idx_layer] is None:
+                  concatenated_hidden_states[idx_layer] = hidden_states[0][idx_layer]
+              else:
+                  concatenated_hidden_states[idx_layer] = tf.concat([concatenated_hidden_states[idx_layer], hidden_states[idx_output][idx_layer]], 1)
+      return concatenated_hidden_states
     
     def predict_tsv(self, tsv_in, tsv_out):
         batch_size = self.config.get("predict", {}).get("batch_size", 400)
