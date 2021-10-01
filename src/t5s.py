@@ -117,7 +117,7 @@ class T5Training(TFT5ForConditionalGeneration):
         self.loss_tracker.update_state(loss)
         self.compiled_metrics.update_state(y, tf.math.argmax(logits, axis=-1, output_type=tf.int32))
         return {m.name: m.result() for m in self.metrics}
-    
+    """
     def _generate_no_beam_search(
         self,
         input_ids,
@@ -139,13 +139,14 @@ class T5Training(TFT5ForConditionalGeneration):
         attention_mask,
         use_cache,
     ):
+    """
         """
         Generate sequences for each example without beam search (num_beams == 1).
         All returned sequence are generated independantly.
 
         Method overwritten in t5s to be able to generate also hidden_states.
         """
-
+    """
         # length of generated sentences / unfinished sentences
         unfinished_sents = tf.ones_like(input_ids[:, 0])
         sent_lengths = tf.ones_like(input_ids[:, 0]) * max_length
@@ -303,7 +304,7 @@ class T5Training(TFT5ForConditionalGeneration):
             return decoded, output_hidden_states
         else:
             return decoded
-
+    """
 def tsv_dataset(fn, tf_tokenizer, input_size=1024, output_size=1280, min_batch_size=2,
                 shuffle_window=None, line_counter=None, skip=None, repeat=False):
     """Creates TF dataset from TSV file
@@ -506,6 +507,7 @@ class T5(object):
 
         try:
             self.model.config.generate_hidden_states = generate_hidden_states
+            """
             outputs = self.model.generate(input_ids,
                                           min_length=min_output_length,
                                           max_length=max_output_length,
@@ -513,8 +515,9 @@ class T5(object):
                                           no_repeat_ngram_size=no_repeat_ngram_size,
                                           length_penalty=length_penalty
                                           )
-            """
+           
             PRO NOVOU VERZI TRANSFORMERS
+             """
             outputs_dict = self.model.generate(input_ids,
                                           min_length=min_output_length,
                                           max_length=max_output_length,
@@ -525,13 +528,13 @@ class T5(object):
                                           return_dict_in_generate=True)
                                           
             outputs = outputs_dict['sequences']
-            """
+            
             if generate_hidden_states:
                 # Split the hidden states from the outputs
-                """
+         
                 hidden_states = outputs_dict['decoder_hidden_states']
-                """
-                outputs, hidden_states = outputs
+                
+                #outputs, hidden_states = outputs
             else:
                 # The hidden states was not required
                 hidden_states = None
@@ -546,7 +549,18 @@ class T5(object):
             return preds, hidden_states
         else:
             return preds
-
+    def concatenate_hidden_states(hidden_states):
+      concatenated_hiden_states = list()
+      assert len(hidden_states) != 0
+      length_output = len(hidden_states)
+      num_of_layers = len(hidden_states[0])
+      for idx_output in range(0, length_of_output):
+        for idx_layer in range(0, num_of_layers):
+          concatenated_hidden_states[idx_layer] = None
+        
+        
+        
+    
     def predict_tsv(self, tsv_in, tsv_out):
         batch_size = self.config.get("predict", {}).get("batch_size", 400)
 
