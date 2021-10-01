@@ -550,7 +550,7 @@ class T5(object):
         else:
             return preds
           
-    def concatenate_hidden_states(hidden_states):      
+    def concatenate_hidden_states(self, hidden_states):      
       assert len(hidden_states) != 0
       # The length of output
       length_output = len(hidden_states)
