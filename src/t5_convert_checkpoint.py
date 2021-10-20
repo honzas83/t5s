@@ -91,6 +91,17 @@ def load_checkpoint(self, checkpoint, assign=False):
         if errors:
             logger.error("There were errors during conversion")
             raise ValueError()
+
+
+def fix_hdf5(fn):
+    logger.info("Fixing HDF5 file: %s (shared weights)", fn)
+    with h5py.File(fn, 'r+') as h5:
+        shared = h5["shared"]
+        shared.attrs["weight_names"] = np.array([b"t5_training/shared/weight:0"])
+        grp1 = shared.create_group("t5_training")
+        grp2 = grp1.create_group("shared")
+        grp2["weight:0"] = shared["weight:0"]
+        del shared["weight:0"]
             
         
 if __name__ == "__main__":
@@ -104,3 +115,4 @@ if __name__ == "__main__":
     load_checkpoint(model, args.checkpoint, assign=True)
     logger.info("Saving into %s", args.output)
     model.save_pretrained(args.output)
+    fix_hdf5(os.path.join(args.output, "tf_model.h5"))
