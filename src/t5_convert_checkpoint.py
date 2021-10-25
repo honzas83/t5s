@@ -9,6 +9,8 @@ from pprint import pprint
 import re
 from t5s import T5Training, TFT5ForConditionalGeneration
 import tensorflow as tf
+import h5py
+import numpy as np
 
 logger = logging.getLogger('t5s.convert_checkpoint')
 
