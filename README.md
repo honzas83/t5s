@@ -7,7 +7,7 @@ T5 is a shortcut for the _Text-to-text transfer transformer_ - the pre-trained s
 Install via Python PIP directly from GitHub:
 
 ```shell
-pip install git+https://github.com/adfre18/t5s
+pip install git+https://github.com/honzas83/t5s
 ```
 
 This will install the t5s library together with it's dependencies: tensorflow, Huggingface Transformers, sklearn etc.
