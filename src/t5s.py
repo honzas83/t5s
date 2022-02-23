@@ -53,7 +53,7 @@ def edit_accuracy(y_true, y_pred):
     return acc
 
 
-class EditAccuracy(tf.python.keras.metrics.MeanMetricWrapper):
+class EditAccuracy(tf.keras.metrics.MeanMetricWrapper):
     def __init__(self, name='edit_accuracy', dtype=None):
         super(EditAccuracy, self).__init__(edit_accuracy, name, dtype=dtype)
 
@@ -72,7 +72,7 @@ def sent_accuracy(y_true, y_pred, mask=None):
     return mul
 
 
-class SentAccuracy(tf.python.keras.metrics.MeanMetricWrapper):
+class SentAccuracy(tf.keras.metrics.MeanMetricWrapper):
     def __init__(self, name='sent_accuracy', dtype=None):
         super(SentAccuracy, self).__init__(sent_accuracy, name, dtype=dtype)
 
