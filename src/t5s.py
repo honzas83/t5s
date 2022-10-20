@@ -120,7 +120,7 @@ class T5Training(TFT5ForConditionalGeneration):
     
     
 def tsv_dataset(fn, tf_tokenizer, input_size=1024, output_size=1280, min_batch_size=2,
-                shuffle_window=None, line_counter=None, skip=None, repeat=False):
+                shuffle_window=None, line_counter=None, skip=None, repeat=False, group_by=True):
     """Creates TF dataset from TSV file
 
     The dataset uses variable-length and variable-sized batches not exceeding
@@ -179,6 +179,9 @@ def tsv_dataset(fn, tf_tokenizer, input_size=1024, output_size=1280, min_batch_s
 
         return tf.maximum(min_batch_size, tf.minimum(in_per_batch, out_per_batch))
 
+    def fixed_batch_func(text, text_att, label, label_att):
+        return min_batch_size
+
     def reduce_func(key, dataset):
         return dataset.padded_batch(key)
 
@@ -200,14 +203,19 @@ def tsv_dataset(fn, tf_tokenizer, input_size=1024, output_size=1280, min_batch_s
     if shuffle_window is not None:
         dataset = dataset.shuffle(shuffle_window, reshuffle_each_iteration=True)
 
-    dataset = (dataset.apply(tf.data.experimental.group_by_window(
-                                  key_func=key_func,
-                                  reduce_func=reduce_func,
-                                  window_size_func=window_size_func
-                            ))
-                      .map(to_dict)
-                      .prefetch(tf.data.experimental.AUTOTUNE)
+    if group_by:
+        use_key_func = key_func
+    else:
+        use_key_func = fixed_batch_func
+
+    dataset = (dataset.group_by_window(
+                    key_func=use_key_func,
+                    reduce_func=reduce_func,
+                    window_size_func=window_size_func
                )
+               .map(to_dict)
+               .prefetch(tf.data.AUTOTUNE)
+              )
     return dataset
 
 
@@ -437,7 +445,7 @@ class T5(object):
         # Initialize optimizer
         optimizer = "adam"
 
-        model.compile(optimizer=optimizer, metrics=metrics)
+        model.compile(optimizer=optimizer, metrics=metrics, loss=None)
 
         callbacks = []
         if learning_rate_schedule:
