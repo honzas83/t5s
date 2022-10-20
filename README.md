@@ -93,6 +93,39 @@ eval_tsv.py match aclImdb.dev.tsv aclImdb.dev.pred.tsv
 
 The whole library could be used directly from Python code, look inside the [examples](examples) directory. You can start with the [ACL IMDB sentiment analysis dataset](examples/t5s_aclimdb.ipynb).
 
+## t5s configuration
+
+The configuration consists of different sections:
+
+### `tokenizer`
+
+*   `spm` - the name of the SentencePiece model
+
+### `t5_model`
+
+* `pre_trained` - the name of the pre-trained model to load for fine-tuning,
+* `save_checkpoint` - save fine-tuned checkpoints under this name,
+* `save_checkpoint_every` - integer, which specifies how often the checkpoints are saved, e.g. the value 1 means save every epoch.
+
+### `dataset`
+
+* `*_tsv` - names of TSV files used as training, development and test sets,
+* `loader` - specification how to load the training data
+  * `loader.input_size` - maximum number of input tokens in the batch
+  * `loader.output_size` - maximum number of output tokens in the batch
+  * `loader.min_batch_size` - minimum number of examples in the batch. Together with `input_size` and `output_size` specifies the maximum length of an input and an output sequence (`input_size//min_batch_size`, `output_size//min_batch_size`).
+  * `loader.group_by` - boolean, If `True` (default)  the input/output pairs are groupped into groups with similar lengths. Otherwise, the input/output pairs are mixed to batches containing exactly `min_batch_size` pairs.
+
+### `training`
+
+* `shared_trainable` - boolean, if `True`, the parameters of shared embedding layer are trained,
+* `encoder_trainable` - boolean, if `True`, the parameters of the encoder are trained,
+* `n_epochs` - number of training epochs,
+* `initial_epoch` - number of training epochs already performed, the next epoch will be `initial_epoch+1`,
+* `steps_per_epoch` - the length of each epoch in steps, if ommited, the epoch means one pass over the training TSV,
+* `learning_rate` - initial learning rate for `epoch=1`
+* `learning_rate_schedule` - boolean, if `True`, the sqrt learning rate schedule is used. 
+
 ### Generate hidden state outputs
 
 The Hugginface Transformers library does not allow to generate the hidden states together in the `generate()` method. The `t5s` library includes the patched version of `_generate_no_beam_search()` method which accumulates the hidden states during generation of the output.
