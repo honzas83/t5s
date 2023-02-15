@@ -1,6 +1,6 @@
 sentencepiece
 tensorflow
 tensorflow-text
-transformers>=4.10.2
+transformers==4.23.1
 pyyaml
 scikit-learn
