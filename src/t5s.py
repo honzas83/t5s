@@ -2,6 +2,7 @@ from tensorflow_text.python.ops.sentencepiece_tokenizer import SentencepieceToke
 import tensorflow as tf
 from transformers import (T5Tokenizer,
                           TFT5ForConditionalGeneration,
+                          T5ForConditionalGeneration,
                           generation_tf_utils as _tfu)
 import transformers
 from tensorflow.keras.callbacks import LearningRateScheduler, Callback, EarlyStopping
@@ -53,7 +54,7 @@ def edit_accuracy(y_true, y_pred):
     return acc
 
 
-class EditAccuracy(tf.python.keras.metrics.MeanMetricWrapper):
+class EditAccuracy(tf.keras.metrics.MeanMetricWrapper):
     def __init__(self, name='edit_accuracy', dtype=None):
         super(EditAccuracy, self).__init__(edit_accuracy, name, dtype=dtype)
 
@@ -72,7 +73,7 @@ def sent_accuracy(y_true, y_pred, mask=None):
     return mul
 
 
-class SentAccuracy(tf.python.keras.metrics.MeanMetricWrapper):
+class SentAccuracy(tf.keras.metrics.MeanMetricWrapper):
     def __init__(self, name='sent_accuracy', dtype=None):
         super(SentAccuracy, self).__init__(sent_accuracy, name, dtype=dtype)
 
@@ -273,6 +274,7 @@ class T5(object):
             self.config = config
         self.model = None
         self.predict_tokenizers = None
+
     def get_transformers_lib_version(self):
         print(transformers.__version__)
       
@@ -297,7 +299,17 @@ class T5(object):
             model_fn = model_config["pre_trained"]
 
         self.logger.info("Loading model from %s", model_fn)
-        self.model = T5Training.from_pretrained(model_fn)
+        load_in_pytorch = False
+        if "predict" in self.config:
+            predict_setup = self.config["predict"]
+            if "load_in_pytorch" in predict_setup:
+                load_in_pytorch = predict_setup["load_in_pytorch"]
+
+        if load_in_pytorch:
+            self.model = T5ForConditionalGeneration.from_pretrained(model_fn, from_tf=True)
+        else:
+            self.model = T5Training.from_pretrained(model_fn)
+	
         return self.model
 
     def predict(self, batch, generate_hidden_states=False):
@@ -315,10 +327,19 @@ class T5(object):
         length_penalty = predict_config.get("length_penalty", 1.0)
 
         tokenizer, tf_tokenizer = self.predict_tokenizers
+        # predicting with PyTorch model
+        input_ids = None
+        predict_in_pytorch = False
+        predict_setup = self.config["predict"]
+        if "load_in_pytorch" in predict_setup:
+            if predict_setup["load_in_pytorch"]:
+                input_ids = tokenizer(batch, return_tensors="pt").input_ids
+                predict_in_pytorch = predict_setup["load_in_pytorch"]
 
-        sentences = tokenizer(batch, padding="longest", max_length=max_input_length, truncation=True)
-        input_ids = tf.constant(sentences["input_ids"])
-
+        if input_ids is None:
+            sentences = tokenizer(batch, padding="longest", max_length=max_input_length, truncation=True)
+            input_ids = tf.constant(sentences["input_ids"])
+	
         try:
             self.model.config.generate_hidden_states = generate_hidden_states
            
@@ -341,9 +362,11 @@ class T5(object):
                 hidden_states = None
         finally:
             self.model.config.generate_hidden_states = False
-
-        preds = tf_tokenizer.detokenize(outputs).numpy()
-        preds = [i.decode() for i in preds]
+        if predict_in_pytorch:
+            preds = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        else:
+            preds = tf_tokenizer.detokenize(outputs).numpy()
+            preds = [i.decode() for i in preds]
 
         if hidden_states:
             # Also return the generated hidden states
