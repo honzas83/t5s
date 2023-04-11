@@ -3,6 +3,7 @@ import tensorflow as tf
 from transformers import (T5Tokenizer,
                           TFT5ForConditionalGeneration,
                           T5ForConditionalGeneration,
+                          TFMT5ForConditionalGeneration,
                           generation_tf_utils as _tfu)
 import transformers
 from tensorflow.keras.callbacks import LearningRateScheduler, Callback, EarlyStopping
@@ -79,6 +80,47 @@ class SentAccuracy(tf.keras.metrics.MeanMetricWrapper):
 
 
 class T5Training(TFT5ForConditionalGeneration):
+    # https://github.com/snapthat/TF-T5-text-to-text/blob/master/snapthatT5/notebooks/TF-T5-%20Training.ipynb
+
+    def __init__(self, *args, log_dir=None, cache_dir=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.loss_tracker = tf.keras.metrics.Mean(name='loss')
+
+    @tf.function
+    def train_step(self, data):
+        x, _ = data
+        y = x["labels"]
+        #  mask = x["decoder_attention_mask"]
+        with tf.GradientTape() as tape:
+            outputs = self(x, training=True)
+            loss = outputs[0]
+            logits = outputs[1]
+            loss = tf.reduce_mean(loss)
+
+            grads = tape.gradient(loss, self.trainable_variables)
+
+        self.optimizer.apply_gradients(zip(grads, self.trainable_variables))
+
+        self.loss_tracker.update_state(loss)
+        self.compiled_metrics.update_state(y, tf.math.argmax(logits, axis=-1, output_type=tf.int32))
+        metrics = {m.name: m.result() for m in self.metrics}
+
+        return metrics
+
+    def test_step(self, data):
+        x, _ = data
+        y = x["labels"]
+        #  mask = x["decoder_attention_mask"]
+        output = self(x, training=False)
+        loss = output[0]
+        loss = tf.reduce_mean(loss)
+        logits = output[1]
+
+        self.loss_tracker.update_state(loss)
+        self.compiled_metrics.update_state(y, tf.math.argmax(logits, axis=-1, output_type=tf.int32))
+        return {m.name: m.result() for m in self.metrics}
+    
+class MT5Training(TFMT5ForConditionalGeneration):
     # https://github.com/snapthat/TF-T5-text-to-text/blob/master/snapthatT5/notebooks/TF-T5-%20Training.ipynb
 
     def __init__(self, *args, log_dir=None, cache_dir=None, **kwargs):
@@ -308,7 +350,10 @@ class T5(object):
         if load_in_pytorch:
             self.model = T5ForConditionalGeneration.from_pretrained(model_fn, from_tf=True)
         else:
-            self.model = T5Training.from_pretrained(model_fn)
+            if 'mt5' in model_fn:
+                self.model = MT5Training.from_pretrained(model_fn)
+            else:
+                self.model = T5Training.from_pretrained(model_fn)
 	
         return self.model
 
