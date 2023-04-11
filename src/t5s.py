@@ -2,6 +2,8 @@ from tensorflow_text.python.ops.sentencepiece_tokenizer import SentencepieceToke
 import tensorflow as tf
 from transformers import (T5Tokenizer,
                           TFT5ForConditionalGeneration,
+                          T5ForConditionalGeneration,
+                          TFMT5ForConditionalGeneration,
                           generation_tf_utils as _tfu)
 import transformers
 from tensorflow.keras.callbacks import LearningRateScheduler, Callback, EarlyStopping
@@ -78,6 +80,47 @@ class SentAccuracy(tf.keras.metrics.MeanMetricWrapper):
 
 
 class T5Training(TFT5ForConditionalGeneration):
+    # https://github.com/snapthat/TF-T5-text-to-text/blob/master/snapthatT5/notebooks/TF-T5-%20Training.ipynb
+
+    def __init__(self, *args, log_dir=None, cache_dir=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.loss_tracker = tf.keras.metrics.Mean(name='loss')
+
+    @tf.function
+    def train_step(self, data):
+        x, _ = data
+        y = x["labels"]
+        #  mask = x["decoder_attention_mask"]
+        with tf.GradientTape() as tape:
+            outputs = self(x, training=True)
+            loss = outputs[0]
+            logits = outputs[1]
+            loss = tf.reduce_mean(loss)
+
+            grads = tape.gradient(loss, self.trainable_variables)
+
+        self.optimizer.apply_gradients(zip(grads, self.trainable_variables))
+
+        self.loss_tracker.update_state(loss)
+        self.compiled_metrics.update_state(y, tf.math.argmax(logits, axis=-1, output_type=tf.int32))
+        metrics = {m.name: m.result() for m in self.metrics}
+
+        return metrics
+
+    def test_step(self, data):
+        x, _ = data
+        y = x["labels"]
+        #  mask = x["decoder_attention_mask"]
+        output = self(x, training=False)
+        loss = output[0]
+        loss = tf.reduce_mean(loss)
+        logits = output[1]
+
+        self.loss_tracker.update_state(loss)
+        self.compiled_metrics.update_state(y, tf.math.argmax(logits, axis=-1, output_type=tf.int32))
+        return {m.name: m.result() for m in self.metrics}
+    
+class MT5Training(TFMT5ForConditionalGeneration):
     # https://github.com/snapthat/TF-T5-text-to-text/blob/master/snapthatT5/notebooks/TF-T5-%20Training.ipynb
 
     def __init__(self, *args, log_dir=None, cache_dir=None, **kwargs):
@@ -281,6 +324,7 @@ class T5(object):
             self.config = config
         self.model = None
         self.predict_tokenizers = None
+
     def get_transformers_lib_version(self):
         print(transformers.__version__)
       
@@ -305,7 +349,20 @@ class T5(object):
             model_fn = model_config["pre_trained"]
 
         self.logger.info("Loading model from %s", model_fn)
-        self.model = T5Training.from_pretrained(model_fn)
+        load_in_pytorch = False
+        if "predict" in self.config:
+            predict_setup = self.config["predict"]
+            if "load_in_pytorch" in predict_setup:
+                load_in_pytorch = predict_setup["load_in_pytorch"]
+
+        if load_in_pytorch:
+            self.model = T5ForConditionalGeneration.from_pretrained(model_fn, from_tf=True)
+        else:
+            if 'mt5' in model_fn:
+                self.model = MT5Training.from_pretrained(model_fn)
+            else:
+                self.model = T5Training.from_pretrained(model_fn)
+	
         return self.model
 
     def predict(self, batch, generate_hidden_states=False):
@@ -323,10 +380,19 @@ class T5(object):
         length_penalty = predict_config.get("length_penalty", 1.0)
 
         tokenizer, tf_tokenizer = self.predict_tokenizers
+        # predicting with PyTorch model
+        input_ids = None
+        predict_in_pytorch = False
+        predict_setup = self.config["predict"]
+        if "load_in_pytorch" in predict_setup:
+            if predict_setup["load_in_pytorch"]:
+                input_ids = tokenizer(batch, return_tensors="pt").input_ids
+                predict_in_pytorch = predict_setup["load_in_pytorch"]
 
-        sentences = tokenizer(batch, padding="longest", max_length=max_input_length, truncation=True)
-        input_ids = tf.constant(sentences["input_ids"])
-
+        if input_ids is None:
+            sentences = tokenizer(batch, padding="longest", max_length=max_input_length, truncation=True)
+            input_ids = tf.constant(sentences["input_ids"])
+	
         try:
             self.model.config.generate_hidden_states = generate_hidden_states
            
@@ -349,9 +415,11 @@ class T5(object):
                 hidden_states = None
         finally:
             self.model.config.generate_hidden_states = False
-
-        preds = tf_tokenizer.detokenize(outputs).numpy()
-        preds = [i.decode() for i in preds]
+        if predict_in_pytorch:
+            preds = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        else:
+            preds = tf_tokenizer.detokenize(outputs).numpy()
+            preds = [i.decode() for i in preds]
 
         if hidden_states:
             # Also return the generated hidden states
