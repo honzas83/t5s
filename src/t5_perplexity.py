@@ -30,6 +30,7 @@ if __name__ == "__main__":
     else:
         slice_description = f"[{args.skip_first if args.skip_first != 0 else ''}:{-args.skip_last if args.skip_last != 0 else ''}]"
 
+    outputs = []
     for fn in args.tsv_in:
         logger.info(f"Processing file: {fn}")
         losses = t5.compute_perplexity_tsv(fn, batch_size=args.batch_size)
@@ -38,4 +39,7 @@ if __name__ == "__main__":
         ppl = 2**(sum(flat_losses)/len(flat_losses))
         ppl = round(ppl, args.round_digits)
 
-        print(f"{args.config}: {fn}: perplexity{slice_description}: {ppl}")
+        outputs.append(f"{args.config}: {fn}: perplexity{slice_description}: {ppl}")
+
+    for output in outputs:
+        print(output)
