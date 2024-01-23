@@ -12,7 +12,7 @@ with open('requirements.txt') as f:
 
 setuptools.setup(
     name="t5s",
-    version="0.3",
+    version="0.4",
     author="Jan Švec",
     author_email="honzas@ntis.zcu.cz",
     description="T5 simple (text-to-text transfer transformer made simple)",
