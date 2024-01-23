@@ -25,6 +25,7 @@ setuptools.setup(
              "src/t5_convert_checkpoint.py",
              "src/t5_fine_tune.py",
              "src/t5_predict.py",
+             "src/t5_perplexity.py",
              "src/t5_evaluate.py"],
     classifiers=[
         "Programming Language :: Python :: 3",

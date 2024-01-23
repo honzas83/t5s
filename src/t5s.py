@@ -575,7 +575,7 @@ class T5(object):
                 yaml_dump_result(eval_results, sys.stdout)
                 yaml_dump_result(eval_results, fw)
 
-    def compute_perplexity(self, batch_input, batch_output, skip_first_tokens=0, skip_last_tokens=0, replace_eos_token=False):
+    def compute_perplexity(self, batch_input, batch_output):
         def compute_loss(labels, logits):
             loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
                 from_logits=True, reduction=tf.keras.losses.Reduction.NONE
@@ -613,11 +613,12 @@ class T5(object):
         loss_values = []
         for output_line, loss_line in zip(output_ids, loss):
             eos_idx = list(output_line).index(tokenizer.eos_token_id)
-            loss_values.append(loss_line[skip_first_tokens:eos_idx+1-skip_last_tokens].numpy().tolist())
+            loss_values.append(loss_line[:eos_idx+1].numpy().tolist())
         return loss_values
 
-    def compute_perplexity_tsv(self, tsv_in, skip_first_tokens=0, skip_last_tokens=0, replace_eos_token=False):
-        batch_size = self.config.get("predict", {}).get("batch_size", 400)
+    def compute_perplexity_tsv(self, tsv_in, batch_size=None):
+        if batch_size is None:
+            batch_size = self.config.get("predict", {}).get("batch_size", 400)
 
         with open(tsv_in, "r", encoding="utf-8") as fr:
             batch_input = []
@@ -625,7 +626,7 @@ class T5(object):
             return_losses = []
 
             def flush(n_predicted=[0]):
-                losses = self.compute_perplexity(batch_input, batch_output, skip_first_tokens=skip_first_tokens, skip_last_tokens=skip_last_tokens)
+                losses = self.compute_perplexity(batch_input, batch_output)
                 n_predicted[0] += len(losses)
 
                 del batch_input[:]
