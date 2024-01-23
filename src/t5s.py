@@ -575,6 +575,79 @@ class T5(object):
                 yaml_dump_result(eval_results, sys.stdout)
                 yaml_dump_result(eval_results, fw)
 
+    def compute_perplexity(self, batch_input, batch_output, skip_first_tokens=0, skip_last_tokens=0, replace_eos_token=False):
+        def compute_loss(labels, logits):
+            loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
+                from_logits=True, reduction=tf.keras.losses.Reduction.NONE
+            )
+        
+            # Clip negative labels to zero here to avoid NaNs and errors - those positions will get masked later anyway
+            unmasked_loss = loss_fn(tf.nn.relu(labels), logits)
+            unmasked_loss = unmasked_loss / tf.math.log(2.)
+            return unmasked_loss
+    
+        if self.predict_tokenizers is None:
+            self.predict_tokenizers = self.load_tokenizer("predict")
+
+        self.load_model()
+
+        predict_config = self.config.get("predict", {})
+
+        max_input_length = predict_config.get("max_input_length", None)
+        max_output_length = predict_config.get("max_output_length", None)
+
+        tokenizer, tf_tokenizer = self.predict_tokenizers
+
+        input = tokenizer(batch_input, padding="longest", max_length=max_input_length, truncation=True)
+        input_ids = tf.constant(input["input_ids"])
+
+        output = tokenizer(batch_output, padding="longest", max_length=max_output_length, truncation=True)
+        output_ids = tf.constant(output["input_ids"])
+
+        decoder_input_ids = self.model._shift_right(output_ids)
+
+        outputs = self.model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+                                          
+        loss = compute_loss(output_ids, outputs.logits)
+
+        loss_values = []
+        for output_line, loss_line in zip(output_ids, loss):
+            eos_idx = list(output_line).index(tokenizer.eos_token_id)
+            loss_values.append(loss_line[skip_first_tokens:eos_idx+1-skip_last_tokens].numpy().tolist())
+        return loss_values
+
+    def compute_perplexity_tsv(self, tsv_in, skip_first_tokens=0, skip_last_tokens=0, replace_eos_token=False):
+        batch_size = self.config.get("predict", {}).get("batch_size", 400)
+
+        with open(tsv_in, "r", encoding="utf-8") as fr:
+            batch_input = []
+            batch_output = []
+            return_losses = []
+
+            def flush(n_predicted=[0]):
+                losses = self.compute_perplexity(batch_input, batch_output, skip_first_tokens=skip_first_tokens, skip_last_tokens=skip_last_tokens)
+                n_predicted[0] += len(losses)
+
+                del batch_input[:]
+                del batch_output[:]
+                self.logger.info("Processed %d items", n_predicted[0])
+                return_losses.extend(losses)
+
+            for line in fr:
+                input_sent, output_sent = line.strip().split("\t", 1)
+                batch_input.append(input_sent)
+                batch_output.append(output_sent)
+                if len(batch_input) >= batch_size:
+                    flush()
+            else:
+                if batch_input:
+                    flush()
+
+            return return_losses
+
+
+t5s.T5.compute_perplexity = compute_perplexity
+t5s.T5.compute_perplexity_tsv = compute_perplexity_tsv
 
 #  Evaluation metrics definition
 
