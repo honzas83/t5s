@@ -38,4 +38,4 @@ if __name__ == "__main__":
         ppl = 2**(sum(flat_losses)/len(flat_losses))
         ppl = round(ppl, args.round_digits)
 
-        print(f"{fn}: perplexity{slice_description}: {ppl}")
+        print(f"{args.config}: {fn}: perplexity{slice_description}: {ppl}")
