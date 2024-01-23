@@ -600,13 +600,14 @@ class T5(object):
 
         input = tokenizer(batch_input, padding="longest", max_length=max_input_length, truncation=True)
         input_ids = tf.constant(input["input_ids"])
+        attention_mask = tf.constant(input["attention_mask"])
 
         output = tokenizer(batch_output, padding="longest", max_length=max_output_length, truncation=True)
         output_ids = tf.constant(output["input_ids"])
 
         decoder_input_ids = self.model._shift_right(output_ids)
 
-        outputs = self.model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+        outputs = self.model(input_ids=input_ids, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids)
                                           
         loss = compute_loss(output_ids, outputs.logits)
 
