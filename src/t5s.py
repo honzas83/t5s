@@ -646,9 +646,6 @@ class T5(object):
             return return_losses
 
 
-t5s.T5.compute_perplexity = compute_perplexity
-t5s.T5.compute_perplexity_tsv = compute_perplexity_tsv
-
 #  Evaluation metrics definition
 
 
