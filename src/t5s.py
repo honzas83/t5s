@@ -326,11 +326,14 @@ class T5(object):
 
         sentences = tokenizer(batch, padding="longest", max_length=max_input_length, truncation=True)
         input_ids = tf.constant(sentences["input_ids"])
+        attention_mask = tf.constant(input["attention_mask"])
+        # TODO: add attention_mask
 
         try:
             self.model.config.generate_hidden_states = generate_hidden_states
            
-            outputs_dict = self.model.generate(input_ids,
+            outputs_dict = self.model.generate(input_ids=input_ids,
+                                          attention_mask=attention_mask,
                                           min_length=min_output_length,
                                           max_length=max_output_length,
                                           early_stopping=True,
